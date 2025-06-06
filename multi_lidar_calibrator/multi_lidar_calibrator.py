@@ -90,7 +90,7 @@ class MultiLidarCalibrator(Node):
         self.lidar_dict = {}
         self.subscribers = []
         self.counter = 0
-        self.tf_Result = {}
+        self.tf_Result = {}  # Dictionary to store transformation matrices {lidar_name: 4x4 numpy array}
         self.read_pcds_from_file = self.declare_parameter("read_pcds_from_file", True).value
         with open(self.output_dir + self.results_file, "w") as file:  # clean the file
             file.write("")
@@ -230,8 +230,14 @@ class MultiLidarCalibrator(Node):
             calibration.transform_pointcloud()
             # Log the calibration information
             self.log_calibration_info(calibration)
-            # Save calibration result
-            self.tf_Result[source_lidar.name] = calibration.calibrated_transformation.matrix
+            # Save and validate calibration result
+            tf_matrix = calibration.calibrated_transformation.matrix
+            if not isinstance(tf_matrix, np.ndarray) or tf_matrix.shape != (4, 4):
+                self.get_logger().error(f"Invalid transformation matrix for {source_lidar.name}")
+                continue
+                
+            self.tf_Result[source_lidar.name] = tf_matrix
+            self.get_logger().info(f"Successfully stored transformation for {source_lidar.name}")
             # Modify the URDF file if a path is provided
             if self.urdf_path != "":
                 modify_urdf_joint_origin(
@@ -361,8 +367,14 @@ class MultiLidarCalibrator(Node):
             if calibration.target == target_lidar:
                 not_calibrated.remove(calibration.source)
                 self.log_calibration_info(calibration)
-                # Save calibration result
-                self.tf_Result[calibration.source.name] = calibration.calibrated_transformation.matrix
+                # Save and validate calibration result
+                tf_matrix = calibration.calibrated_transformation.matrix
+                if not isinstance(tf_matrix, np.ndarray) or tf_matrix.shape != (4, 4):
+                    self.get_logger().error(f"Invalid transformation matrix for {calibration.source.name}")
+                    continue
+                    
+                self.tf_Result[calibration.source.name] = tf_matrix
+                self.get_logger().info(f"Successfully stored transformation for {calibration.source.name}")
                 if self.urdf_path != "":
                     modify_urdf_joint_origin(
                         self.urdf_path,
@@ -530,10 +542,9 @@ class MultiLidarCalibrator(Node):
                 if self.to_stitch_cloud:
                     from .stitch_cloud.stitched_cloud_publisher import StitchedCloudPublisher
                     stitcher = StitchedCloudPublisher(
-                        self.lidar_dict,
-                        self.topic_names,
-                        self.target_lidar,
-                        self.tf_Result
+                        topic_names=self.topic_names,
+                        target_lidar=self.target_lidar,
+                        tf_Result=self.tf_Result
                     )
                     rclpy.spin(stitcher)
                     stitcher.destroy_node()
