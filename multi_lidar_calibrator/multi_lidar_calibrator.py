@@ -50,6 +50,7 @@ class MultiLidarCalibrator(Node):
         self.read_tf_from_table = self.declare_parameter("read_tf_from_table", True).value
         self.table_degrees = self.declare_parameter("table_degrees", True).value
         self.topic_names = self.declare_parameter("lidar_topics", ["lidar_1, lidar_2"]).value
+        self.to_stitch_cloud = self.declare_parameter("publish_stitched_cloud", True).value
         self.target_lidar = self.declare_parameter("target_frame_id", "lidar_1").value
         self.base_frame_id = self.declare_parameter("base_frame_id", "base_link").value
         self.calibrate_target = self.declare_parameter("calibrate_target", False).value
@@ -526,6 +527,16 @@ class MultiLidarCalibrator(Node):
             self.lidar_data = {}  # Clean the data after each calibration (for multiple runs)
             self.counter += 1
             if self.counter >= self.runs_count:
+                if self.to_stitch_cloud:
+                    from .stitch_cloud.stitched_cloud_publisher import StitchedCloudPublisher
+                    stitcher = StitchedCloudPublisher(
+                        self.lidar_dict,
+                        self.topic_names,
+                        self.target_lidar,
+                        self.tf_Result
+                    )
+                    rclpy.spin(stitcher)
+                    stitcher.destroy_node()
                 exit(0)
 
 

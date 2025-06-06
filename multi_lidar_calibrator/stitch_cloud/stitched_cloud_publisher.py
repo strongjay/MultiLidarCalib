@@ -10,10 +10,11 @@ from tf2_ros import TransformBroadcaster
 from typing import Dict
 
 class StitchedCloudPublisher(Node):
-    def __init__(self, lidar_dict: Dict, topic_names: list, target_lidar: str):
+    def __init__(self, lidar_dict: Dict, topic_names: list, target_lidar: str, tf_Result: Dict = None):
         super().__init__('stitched_cloud_publisher')
         
         self.lidar_dict = lidar_dict
+        self.tf_Result = tf_Result if tf_Result else {}
         self.target_lidar = target_lidar
         self.topic_names = topic_names
         
@@ -55,8 +56,15 @@ class StitchedCloudPublisher(Node):
                 if len(xyz) == 0:
                     return
                 
-                # Apply calibration transform
-                tf_matrix = self.lidar_dict[lidar_name].tf_matrix.matrix
+                # Apply calibration transform - prefer tf_Result if available
+                if lidar_name in self.tf_Result:
+                    tf_matrix = self.tf_Result[lidar_name]
+                elif hasattr(self.lidar_dict[lidar_name], 'tf_matrix'):
+                    tf_matrix = self.lidar_dict[lidar_name].tf_matrix.matrix
+                else:
+                    self.get_logger().error(f"No transformation matrix found for {lidar_name}")
+                    return
+                
                 homogeneous_xyz = np.column_stack([xyz, np.ones(len(xyz))])
                 transformed_xyz = np.dot(homogeneous_xyz, tf_matrix.T)[:, :3]
                 
