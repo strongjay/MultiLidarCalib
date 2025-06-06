@@ -13,7 +13,14 @@
 
   <exec_depend>ros2launch</exec_depend>
 
+  <depend>python3-numpy</depend>
+  <depend>python3-open3d</depend>
+  <depend>python3-ros2-numpy</depend>
+
   <export>
     <build_type>ament_python</build_type>
+    <ament_python>
+      <package name="multi_lidar_calibrator" />
+    </ament_python>
   </export>
 </package>

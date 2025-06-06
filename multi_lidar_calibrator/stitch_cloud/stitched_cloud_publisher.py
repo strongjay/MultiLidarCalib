@@ -8,13 +8,17 @@ from sensor_msgs.msg import PointCloud2
 from geometry_msgs.msg import TransformStamped
 from tf2_ros import TransformBroadcaster
 from typing import Dict
+from sensor_msgs.msg import PointField 
+from ros2_numpy.point_cloud2 import split_xyz
 
 class StitchedCloudPublisher(Node):
-    def __init__(self, lidar_dict: Dict, topic_names: list, target_lidar: str, tf_Result: Dict = None):
+    def __init__(self, topic_names: list, target_lidar: str, tf_Result: Dict):
         super().__init__('stitched_cloud_publisher')
         
-        self.lidar_dict = lidar_dict
-        self.tf_Result = tf_Result if tf_Result else {}
+        if not tf_Result:
+            raise ValueError("tf_Result cannot be empty")
+            
+        self.tf_Result = tf_Result
         self.target_lidar = target_lidar
         self.topic_names = topic_names
         
@@ -45,50 +49,72 @@ class StitchedCloudPublisher(Node):
     def pointcloud_callback(self, msg: PointCloud2, lidar_name: str):
         """Apply calibration transform and publish stitched point cloud."""
         try:
-            if lidar_name in self.lidar_dict:
-                # Convert ROS PointCloud2 to numpy array
-                points = rnp.numpify(msg)
-                if 'xyz' not in points.dtype.names:
-                    self.get_logger().warn(f"Point cloud from {lidar_name} missing 'xyz' field")
-                    return
-                
-                xyz = points["xyz"]
-                if len(xyz) == 0:
-                    return
-                
-                # Apply calibration transform - prefer tf_Result if available
-                if lidar_name in self.tf_Result:
-                    tf_matrix = self.tf_Result[lidar_name]
-                elif hasattr(self.lidar_dict[lidar_name], 'tf_matrix'):
-                    tf_matrix = self.lidar_dict[lidar_name].tf_matrix.matrix
-                else:
-                    self.get_logger().error(f"No transformation matrix found for {lidar_name}")
-                    return
-                
-                homogeneous_xyz = np.column_stack([xyz, np.ones(len(xyz))])
-                transformed_xyz = np.dot(homogeneous_xyz, tf_matrix.T)[:, :3]
-                
-                # Convert back to PointCloud2
-                new_points = np.zeros(len(xyz), dtype=[("xyz", np.float32, 3)])
-                new_points["xyz"] = transformed_xyz
-                new_msg = rnp.msgify(PointCloud2, new_points)
-                
-                # Preserve original header info but update frame_id to target frame
-                new_msg.header = msg.header
+            if lidar_name == self.target_lidar:
+                # 目标雷达无需变换
+                new_msg = msg
                 new_msg.header.frame_id = self.target_lidar
-                
-                # Store transformed cloud
                 self.transformed_clouds[lidar_name] = new_msg
-                
-                # Publish TF for visualization
-                self.publish_tf(lidar_name, tf_matrix)
-                
-                # Publish stitched cloud if we have all transformed clouds
-                if len(self.transformed_clouds) == len(self.topic_names):
-                    self.publish_stitched_cloud()
-                    
+                return
+
+            if lidar_name not in self.tf_Result:
+                self.get_logger().warn(f"No calibration result for {lidar_name}")
+                return
+
+            # 检查点云字段结构（兼容xyz合并字段）
+            required_fields = {'x', 'y', 'z'}
+            msg_fields = {field.name for field in msg.fields}
+            
+            # 情况1：标准分离字段 (x,y,z)
+            if required_fields.issubset(msg_fields):
+                xyz = split_xyz(rnp.numpify(msg))
+                # points = rnp.numpify(msg)
+                # xyz = np.column_stack([points['x'], points['y'], points['z']])
+                # num_points = len(xyz)
+            
+            # 情况2：不支持的格式
+            else:
+                self.get_logger().error(
+                    f"Unsupported point cloud format from {lidar_name}. "
+                    f"Required fields: {required_fields}, Got: {msg_fields}"
+                )
+                return
+
+            # 应用标定变换
+            tf_matrix = self.tf_Result[lidar_name]
+            homogeneous_xyz = np.column_stack([xyz, np.ones(len(xyz))])
+            transformed_xyz = np.dot(homogeneous_xyz, tf_matrix.T)[:, :3]
+
+            # 重建标准化点云消息
+            new_msg = self.create_transformed_msg(msg, transformed_xyz)
+            self.transformed_clouds[lidar_name] = new_msg
+
         except Exception as e:
-            self.get_logger().error(f"Error processing {lidar_name} point cloud: {str(e)}")
+            self.get_logger().error(
+                f"Error processing {lidar_name}: {str(e)}", 
+                throttle_duration_sec=1.0
+            )
+
+    def create_transformed_msg(self, original_msg: PointCloud2, xyz: np.ndarray) -> PointCloud2:
+        """创建标准化格式的点云消息"""
+        # 构造结构化数组
+        dtype = np.dtype([('x', np.float32), ('y', np.float32), ('z', np.float32)])
+        structured_arr = np.zeros(len(xyz), dtype=dtype)
+        structured_arr['x'] = xyz[:, 0]
+        structured_arr['y'] = xyz[:, 1]
+        structured_arr['z'] = xyz[:, 2]
+        
+        # 转换回ROS消息
+        msg = rnp.msgify(PointCloud2, structured_arr)
+        msg.header = original_msg.header
+        msg.header.frame_id = self.target_lidar
+        msg.height = 1
+        msg.width = len(xyz)
+        msg.is_bigendian = False
+        msg.point_step = 12  # 3*float32
+        msg.row_step = msg.point_step * msg.width
+        msg.is_dense = True
+        return msg
+
 
     def publish_tf(self, lidar_name: str, tf_matrix: np.ndarray):
         """Publish transform from LiDAR to target frame."""
@@ -115,29 +141,79 @@ class StitchedCloudPublisher(Node):
     def publish_stitched_cloud(self):
         """Combine all transformed point clouds and publish."""
         try:
-            # Combine all point clouds
-            combined_points = []
-            for lidar_name, cloud_msg in self.transformed_clouds.items():
-                points = rnp.numpify(cloud_msg)
-                combined_points.append(points["xyz"])
-            
-            if not combined_points:
+            # Validate we have clouds to stitch
+            if not self.transformed_clouds:
+                self.get_logger().warn("No transformed clouds available for stitching")
                 return
-                
-            # Create new PointCloud2 message
-            all_points = np.concatenate(combined_points)
-            new_points = np.zeros(len(all_points), dtype=[("xyz", np.float32, 3)])
-            new_points["xyz"] = all_points
+
+            # Calculate total points and validate
+            total_points = 0
+            for cloud_msg in self.transformed_clouds.values():
+                try:
+                    # points = rnp.numpify(cloud_msg)
+                    # xyz = np.column_stack([points['x'], points['y'], points['z']])
+                    # num_points = len(xyz)
+                    xyz = split_xyz(rnp.numpify(cloud_msg))
+                except Exception as e:
+                    self.get_logger().error(f"Error counting points: {str(e)}")
+                    continue
             
-            stitched_msg = rnp.msgify(PointCloud2, new_points)
+            if total_points == 0:
+                self.get_logger().warn("All transformed clouds are empty")
+                return
+
+            # Create output array
+            all_points = np.empty((total_points, 3), dtype=np.float32)
+            current_idx = 0
+            
+            # Fill the array with transformed points
+            for lidar_name, cloud_msg in self.transformed_clouds.items():
+                try:
+                    # points = rnp.numpify(cloud_msg)
+                    points = split_xyz(rnp.numpify(cloud_msg))
+                    if isinstance(points, np.ndarray):
+                        if hasattr(points, 'dtype') and hasattr(points.dtype, 'names') and 'xyz' in points.dtype.names:
+                            # Structured array with xyz field
+                            xyz = points['xyz']
+                            num_points = len(xyz)
+                        else:
+                            # Regular array (from merged xyz field)
+                            xyz = points.reshape(-1, 3)
+                            num_points = len(xyz)
+                        
+                        if num_points > 0:
+                            all_points[current_idx:current_idx+num_points] = xyz
+                            current_idx += num_points
+                except Exception as e:
+                    self.get_logger().error(f"Error processing {lidar_name} cloud: {str(e)}")
+                    continue
+
+            # Create output message
+            stitched_msg = PointCloud2()
             stitched_msg.header.stamp = self.get_clock().now().to_msg()
             stitched_msg.header.frame_id = self.target_lidar
-            
+            stitched_msg.height = 1
+            stitched_msg.width = current_idx
+            stitched_msg.fields = [
+                PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
+                PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
+                PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1)
+            ]
+            stitched_msg.is_bigendian = False
+            stitched_msg.point_step = 12
+            stitched_msg.row_step = stitched_msg.point_step * stitched_msg.width
+            stitched_msg.is_dense = True
+            stitched_msg.data = all_points[:current_idx].tobytes()
+
             self.stitched_pub.publish(stitched_msg)
-            self.get_logger().info("Published stitched point cloud", throttle_duration_sec=1.0)
+            self.get_logger().info(
+                f"Published stitched point cloud with {current_idx} points",
+                throttle_duration_sec=1.0
+            )
             
         except Exception as e:
-            self.get_logger().error(f"Error publishing stitched cloud: {str(e)}")
+            self.get_logger().error(f"Error publishing stitched cloud: {str(e)}", 
+                                  throttle_duration_sec=1.0)
 
 def main(args=None):
     rclpy.init(args=args)
