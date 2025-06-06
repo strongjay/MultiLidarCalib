@@ -89,6 +89,7 @@ class MultiLidarCalibrator(Node):
         self.lidar_dict = {}
         self.subscribers = []
         self.counter = 0
+        self.tf_Result = {}
         self.read_pcds_from_file = self.declare_parameter("read_pcds_from_file", True).value
         with open(self.output_dir + self.results_file, "w") as file:  # clean the file
             file.write("")
@@ -228,6 +229,8 @@ class MultiLidarCalibrator(Node):
             calibration.transform_pointcloud()
             # Log the calibration information
             self.log_calibration_info(calibration)
+            # Save calibration result
+            self.tf_Result[source_lidar.name] = calibration.calibrated_transformation.matrix
             # Modify the URDF file if a path is provided
             if self.urdf_path != "":
                 modify_urdf_joint_origin(
@@ -357,6 +360,8 @@ class MultiLidarCalibrator(Node):
             if calibration.target == target_lidar:
                 not_calibrated.remove(calibration.source)
                 self.log_calibration_info(calibration)
+                # Save calibration result
+                self.tf_Result[calibration.source.name] = calibration.calibrated_transformation.matrix
                 if self.urdf_path != "":
                     modify_urdf_joint_origin(
                         self.urdf_path,
