@@ -26,7 +26,7 @@
     # path for point clouds in pcd format. Structure: <lidar_name>/<pcd>/<filename1><filename2>...
     # (path relative to the dir with multi_lidar_calibrator.py)
     # LiDAR transformations must be defined in this file when reading pcds from files
-    pcd_directory: /../data/pcds/
+    pcd_directory: /data/pcds/
 
     base_to_ground_z: 0.338 # assumes base is directly above the origin
 
@@ -45,7 +45,7 @@
     calibrate_to_base: false
 
     # calibration results are stored here (path relative to the dir with multi_lidar_calibrator.py)
-    default_output_dir: /../output/
+    default_output_dir: /output/
 
     # parameters for the GICP algorithm
     # Maximum correspondence points-pair distance.

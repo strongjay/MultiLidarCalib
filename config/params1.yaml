@@ -36,7 +36,7 @@
     # 格式：.pcd  <lidar_name>/<pcd>/<filename1><filename2>...
     # 与 multi_lidar_calibrator.py 的相对路径
     # read_pcds_from_file: true时，transformations 必须定义
-    pcd_directory: /../data/pcds/
+    pcd_directory: /data/pcds/
 
     base_to_ground_z: 0.338 # assumes base is directly above the origin
 
@@ -57,7 +57,7 @@
     calibrate_to_base: false
 
     # 标定结果保存路径 (相对于 multi_lidar_calibrator.py)
-    default_output_dir: /../output/
+    default_output_dir: /output/
 
     # parameters for the GICP algorithm
     # Maximum correspondence points-pair distance.

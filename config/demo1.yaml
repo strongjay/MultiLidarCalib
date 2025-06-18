@@ -12,4 +12,4 @@
     results_file: demo_results.txt
 
     # calibration results are stored here (path relative to the dir with multi_lidar_calibrator.py)
-    output_dir: /../output/
+    output_dir: /output/

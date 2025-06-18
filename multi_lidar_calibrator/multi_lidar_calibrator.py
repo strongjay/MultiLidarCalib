@@ -11,7 +11,16 @@ from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
 from tf2_msgs.msg import TFMessage
 
-from .calibration.Calibration import *
+import os
+import sys
+# 动态添加父目录到Python路径
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(script_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+from multi_lidar_calibrator.calibration.Calibration import *
+from multi_lidar_calibrator.calibration.Lidar import Lidar
 
  
 def get_transfrom(tf_msg: TFMessage, child_frame_id: str) -> Transform:
