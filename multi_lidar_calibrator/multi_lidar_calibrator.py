@@ -61,16 +61,18 @@ class MultiLidarCalibrator(Node):
         self.crop_cloud = self.declare_parameter("crop_cloud", 25).value
 
         self.output_dir = (
-            os.path.dirname(os.path.realpath(__file__))
+            # os.path.dirname(os.path.realpath(__file__))  // install目录
+            os.getcwd() 
             + self.declare_parameter("output_dir", "/../output/").value
         )
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
         self.pcd_in_dir = (
-            os.path.dirname(os.path.realpath(__file__))
+            # os.path.dirname(os.path.realpath(__file__))
+            os.getcwd() 
             + self.declare_parameter("pcd_directory", "/../data/demo/").value
         )
-
+        print(f"access pcd files from directory: {self.pcd_in_dir}")
         self.rel_fitness = self.declare_parameter("rel_fitness", 1e-7).value
         self.rel_rmse = self.declare_parameter("rel_rmse", 1e-7).value
         self.max_iterations = self.declare_parameter("max_iterations", 100).value

@@ -9,7 +9,7 @@ from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
-    pkg_share = get_package_share_directory("multi_lidar_calibrator")
+    pkg_share = os.getcwd() # get_package_share_directory("multi_lidar_calibrator")
     parameter_file = os.path.join(pkg_share, "config", "demo.yaml")
     output = os.path.join(pkg_share, "output")
 
@@ -34,8 +34,8 @@ def generate_launch_description():
                 package="multi_lidar_calibrator",
                 executable="multi_lidar_calibrator",
                 name="multi_lidar_calibration_node",
-                parameters=[parameter_file_launch_config,
-                            output_dir_launch_config],
+                parameters=[{"output_dir": output_dir_launch_config },
+                             parameter_file_launch_config],
                 output="screen",
             ),
         ]
