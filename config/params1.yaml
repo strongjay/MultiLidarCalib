@@ -11,24 +11,7 @@
     # this method is more general and might be more precise but is slower
     use_fitness_based_calibration: false
 
-    # 从topic获取标定数据
-    lidar_topics: [/lidar_1, /left, /right]
-
-    # 从topic获取TFMessage
-    tf_topic: /tf_static
-
     visualize: true
-
-    # 从table获取数据
-    read_tf_from_table: true
-
-    # 是否采用欧拉角
-    table_degrees: true
-
-    # 不同lidar的TFMessage，[translation,rotation] [xyz,rpy] [m, deg/rad]
-    lidar_1: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    left: [0.0, 0.000, 0.0, 0.0, 0.0, 0.0]
-    right: [0.0, 0.000, 0.0, 0.0, 0.0, 0.0]
 
     # 从文件获取标定数据
     read_pcds_from_file: false
@@ -38,17 +21,34 @@
     # read_pcds_from_file: true时，transformations 必须定义
     pcd_directory: /data/pcds/
 
+    # 从topic获取标定数据
+    lidar_topics: [/main, /left, /right]
+
+    # 目标激光雷达frame_id
+    target_frame_id: main
+    
+    # 标定激光雷达frame_id
+    base_frame_id: left, right
+
+    # 从topic获取TFMessage
+    tf_topic: /tf_static
+    
+    # 从table获取数据
+    read_tf_from_table: true
+
+    # 是否采用欧拉角
+    table_degrees: true
+
+    # 不同lidar的TFMessage，[translation,rotation] [xyz,rpy] [m, deg/rad]
+    main: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    left: [0.0, 0.000, 0.0, 0.0, 0.0, 0.0]
+    right: [0.0, 0.000, 0.0, 0.0, 0.0, 0.0]
+
     base_to_ground_z: 0.338 # assumes base is directly above the origin
 
     # when not empty, write resultig transformations into an urdf file
     # assumes that joints in the file have nane in for of <lidar_name>_joint
     # urdf_path: "/home/andrii/TUM/thesis/SensorCalibration/ros2_ws/src/edgar/edgar_state_publisher/urdf/edgar.description.states.urdf"
-
-    # 目标激光雷达frame_id
-    target_frame_id: lidar_1
-    
-    # 标定激光雷达frame_id
-    base_frame_id: left, right
 
     # when true, calibrate target LiDAR (z, and pitch) to the base frame.
     calibrate_target: false
