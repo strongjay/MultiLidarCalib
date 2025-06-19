@@ -1,3 +1,3 @@
 [submodule "TEASER-plusplus"]
-	path = TEASER-plusplus
+	path = multi-lidar_calib/TEASER-plusplus
 	url = https://github.com/MIT-SPARK/TEASER-plusplus.git

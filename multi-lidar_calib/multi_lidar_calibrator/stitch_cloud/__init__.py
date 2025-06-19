@@ -1,0 +1,1 @@
+# Initialize stitch_cloud package
