@@ -53,7 +53,7 @@
     calibrate_to_base: false
 
     # 标定结果保存路径 (相对于 multi_lidar_calibrator.py)
-    default_output_dir: /output/
+    output_dir: /output/
 
     # parameters for the GICP algorithm
     # Maximum correspondence points-pair distance.

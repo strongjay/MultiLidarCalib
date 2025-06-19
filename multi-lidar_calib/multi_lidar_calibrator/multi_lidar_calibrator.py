@@ -72,7 +72,7 @@ class MultiLidarCalibrator(Node):
         self.output_dir = (
             # os.path.dirname(os.path.realpath(__file__))  // install目录
             os.getcwd() 
-            + self.declare_parameter("output_dir", "/../output/").value
+            + self.declare_parameter("output_dir", "/output/").value
         )
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)

@@ -1,6 +1,6 @@
 #!/bin/bash 
 # 直接用命令行调用
-python3 multi_lidar_calibrator/multi_lidar_calibrator.py --ros-args --params-file config/params3.yaml
+python3 multi_lidar_calibrator/multi_lidar_calibrator.py --ros-args --params-file config/params1.yaml
 
 # ros2 package 运行
 # colcon build
