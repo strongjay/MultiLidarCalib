@@ -1,6 +1,7 @@
 import glob
 import os
 from time import time
+import struct
 
 import numpy as np
 import open3d as o3d
@@ -158,7 +159,28 @@ class MultiLidarCalibrator(Node):
         self.get_logger().info(calibration_info)
         with open(self.output_dir + self.results_file, "a") as file:
             file.write(calibration_info + "\n")
-
+    
+    
+    def pointcloud2_to_xyz(self,msg):
+        # 只提取x/y/z字段，假设datatype=7(float32)
+        xyz = []
+        offset_x = offset_y = offset_z = None
+        for f in msg.fields:
+            if f.name == 'x':
+                offset_x = f.offset
+            elif f.name == 'y':
+                offset_y = f.offset
+            elif f.name == 'z':
+                offset_z = f.offset
+        assert offset_x is not None and offset_y is not None and offset_z is not None
+        for i in range(msg.width * msg.height):
+            base = i * msg.point_step
+            x = struct.unpack_from('f', msg.data, base + offset_x)[0]
+            y = struct.unpack_from('f', msg.data, base + offset_y)[0]
+            z = struct.unpack_from('f', msg.data, base + offset_z)[0]
+            xyz.append([x, y, z])
+        return np.array(xyz, dtype=np.float64)
+    
     def read_data(self):
         """Read point clouds from ROS and LiDAR initial transformation from either ROS or table."""
         self.get_logger().info("Received all the needed point clouds")
@@ -193,13 +215,19 @@ class MultiLidarCalibrator(Node):
             )
         for key in self.lidar_data.keys():
             # convert data from ros to pcd needed for open3d
-            t = rnp.numpify(self.lidar_data[key][0])
-            if 'x' in t.dtype.names and 'y' in t.dtype.names and 'z' in t.dtype.names:
-                xyz = np.column_stack([t['x'], t['y'], t['z']])
-            elif 'xyz' in t.dtype.names:  # 兼容旧版逻辑
-                xyz = t['xyz']
-            else:
-                raise ValueError("点云必须包含 x/y/z 或 xyz 字段")
+            # t = rnp.numpify(self.lidar_data[key][0])
+            # print(f"{key} dtype: {t.dtype}, shape: {t.shape}")
+            # print(f"fields: {self.lidar_data[key][0].fields}")
+            # if 'x' in t.dtype.names and 'y' in t.dtype.names and 'z' in t.dtype.names:
+            #     xyz = np.column_stack([t['x'], t['y'], t['z']])
+            # elif 'xyz' in t.dtype.names:  # 兼容旧版逻辑
+            #     xyz = t['xyz']
+            # else:
+            #     raise ValueError("点云必须包含 x/y/z 或 xyz 字段")
+            # # 修正：保证xyz为(N, 3)二维数组
+            # xyz = np.asarray(xyz, dtype=np.float64).reshape(-1, 3)
+            xyz = self.pointcloud2_to_xyz(self.lidar_data[key][0])
+            print(f"{key} pointcloud min: {xyz.min(axis=0)}, max: {xyz.max(axis=0)}")
             pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(xyz))
             self.lidar_dict[key].load_pcd(pcd)
         self.get_logger().info("Converted all the needed ros-data")

@@ -11,6 +11,7 @@ from typing import Dict
 from sensor_msgs.msg import PointField 
 from ros2_numpy.point_cloud2 import pointcloud2_to_xyzi_array
 from message_filters import ApproximateTimeSynchronizer, Subscriber
+import re
 
 fields = [
     PointField(name='x', offset=0, count=1, datatype=PointField.FLOAT32),
@@ -27,7 +28,7 @@ dtype = np.dtype([
 ])
 
 class SyncAndStitchCloudsPub(Node):
-    def __init__(self, topic_names: list, target_lidar: str, tf_Result: Dict):
+    def __init__(self, topic_names: list, target_lidar: str, tf_Result: Dict, fix_intensity=True):
         super().__init__('SyncAndStitchCloudsPub')
         self.get_logger().info("Finish multi-lidar-calibration, publishing stitched cloud...")
         if not tf_Result:
@@ -36,6 +37,7 @@ class SyncAndStitchCloudsPub(Node):
         self.tf_Result = tf_Result
         self.target_lidar = target_lidar
         self.topic_names = topic_names
+        self.fix_intensity = fix_intensity
 
         self.needed_frame_ids = []
         for topic in self.topic_names:
@@ -153,7 +155,10 @@ class SyncAndStitchCloudsPub(Node):
                     structured_arr['x'] = transformed_xyz[:, 0]
                     structured_arr['y'] = transformed_xyz[:, 1]
                     structured_arr['z'] = transformed_xyz[:, 2]
-                    structured_arr['intensity'] = xyzi[:, 3]  # 保留原始强度
+                    if(self.fix_intensity):
+                        structured_arr['intensity'] = 255.0
+                    else:
+                        structured_arr['intensity'] = xyzi[:, 3]  # 保留原始强度
                     self.transformed_clouds[lidar_name] = structured_arr
                 except Exception as e:
                     self.get_logger().error(f"Error processing point cloud data for {lidar_name}: {str(e)}")
@@ -291,24 +296,45 @@ class SyncAndStitchCloudsPub(Node):
         except Exception as e:
             self.get_logger().error(f"Error publishing stitched cloud: {str(e)}", 
                                   throttle_duration_sec=1.0)
+            
+def load_tf_result_from_file(result_file, target_lidar):
+    """
+    解析标定结果文件，返回 {lidar_name: 4x4 numpy array} 字典
+    """
+    tf_result = {}
+    current_lidar = None
+    current_matrix = []
+    with open(result_file, 'r') as f:
+        for line in f:
+            m = re.match(r'(\w+)\s+to\s+(\w+)\s+calibration', line)
+            if m:
+                current_lidar = m.group(1)
+                current_matrix = []
+            elif current_lidar and re.match(r'^\[.*\]$', line.strip()):
+                # 提取所有数字
+                nums = [float(x) for x in re.findall(r'[-+]?\d*\.\d+e[+-]?\d+|[-+]?\d*\.\d+|[-+]?\d+', line)]
+                current_matrix.append(nums)
+                if len(current_matrix) == 4:
+                    tf_result[current_lidar] = np.array(current_matrix)
+                    current_lidar = None
+    tf_result[target_lidar] = np.eye(4)
+    return tf_result
 
-def main(args=None):
-    rclpy.init(args=args)
+# def main(args=None):
+#     rclpy.init(args=args)
     
-    # 这些参数应该从calibrator节点获取
-    # 示例值，实际应该从参数或配置文件中读取
-    topic_names = ['/lidar1', '/lidar2', '/lidar3']  # 输入话题列表
-    target_lidar = 'lidar1'  # 目标坐标系
-    tf_Result = {
-        'lidar1': np.eye(4),  # 示例变换矩阵
-        'lidar2': np.eye(4),
-        'lidar3': np.eye(4)
-    }
+#     # 这些参数应该从calibrator节点获取
+#     # 示例值，实际应该从参数或配置文件中读取
+#     topic_names = ['/lidar1', '/lidar2', '/lidar3']  # 输入话题列表
+#     target_lidar = 'lidar1'  # 目标坐标系
+#     tf_Result = {
+#         'lidar1': np.eye(4),  # 示例变换矩阵
+#         'lidar2': np.eye(4),
+#         'lidar3': np.eye(4)
+#     }
     
-    node = SyncAndStitchCloudsPub(topic_names, target_lidar, tf_Result)
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+#     node = SyncAndStitchCloudsPub(topic_names, target_lidar, tf_Result)
+#     rclpy.spin(node)
+#     node.destroy_node()
+#     rclpy.shutdown()
 
-if __name__ == '__main__':
-    main()
