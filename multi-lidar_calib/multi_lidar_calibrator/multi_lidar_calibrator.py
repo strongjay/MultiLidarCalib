@@ -173,12 +173,20 @@ class MultiLidarCalibrator(Node):
             elif f.name == 'z':
                 offset_z = f.offset
         assert offset_x is not None and offset_y is not None and offset_z is not None
+        nan_count = 0
         for i in range(msg.width * msg.height):
             base = i * msg.point_step
             x = struct.unpack_from('f', msg.data, base + offset_x)[0]
             y = struct.unpack_from('f', msg.data, base + offset_y)[0]
             z = struct.unpack_from('f', msg.data, base + offset_z)[0]
+            if any(np.isnan([x, y, z])):
+                nan_count += 1
+                continue  # 跳过 nan 点
             xyz.append([x, y, z])
+        if nan_count > 0:
+            self.get_logger().warn(f'Filtered out {nan_count} points with nan values in topic {msg.header.frame_id}.')
+        if len(xyz) == 0:
+            self.get_logger().error(f'All points are nan in topic {msg.header.frame_id}!')
         return np.array(xyz, dtype=np.float64)
     
     def read_data(self):
